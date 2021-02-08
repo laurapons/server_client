@@ -170,29 +170,26 @@ public:
                     }
                 });
 
+                
+                spawn(yc, [&io, &s, &buffers, &log] (ba::yield_context timer_yc) mutable {
+                    while (true) {
+                        ba::steady_timer(io, 50ms).async_wait(timer_yc);
+                        if (buffers.client_buffer.size() > 0) {
+                            log("write from buffer");
+                            async_write(s, buffers.client_buffer.data(), timer_yc);
+                            buffers.client_buffer.consume(buffers.client_buffer.size()); // Clear buffer
+                        }
+                    }
+                });
+                
                 spawn(yc, [&io, &yc, &s, &buffers, &log] (ba::yield_context yc_) mutable {
                     while (true) {
-                        /* It doesn't work. In only works if I set:
-                        ba::steady_timer(io, 50ms).async_wait(yc);
-                        and then do the logic), but then I cannot define another timer with another execution.
-                        Ideally I would prefer to trigger an async_write as soon as buffer has data */
-
-                        ba::steady_timer(io, 50ms).async_wait([&](const boost::system::error_code& ec) {
-                            // Check if server added some messages to be transferred through the client
-                            if (buffers.client_buffer.size() > 0) {
-                                async_write(s, buffers.client_buffer.data(), yc);
-                                buffers.client_buffer.consume(buffers.client_buffer.size()); // Clear buffer
-                            }
-                        });
-
-                        ba::steady_timer(io, 3s).async_wait([&](const boost::system::error_code& ec) {
-                            // Send periodic message
-                            Message oMessage = formatMessage(DeviceType::EXT_SERVER, "KEEP_ALIVE");
-                            if (oMessage.isReady) {
-                                log("send KEEP_ALIVE");
-                                async_write(s, ba::buffer(oMessage.message.dump(4)), yc);
-                            }
-                        });
+                        ba::steady_timer(io, 3s).async_wait(yc);
+                        Message oMessage = formatMessage(DeviceType::EXT_SERVER, "KEEP_ALIVE");
+                        if (oMessage.isReady) {
+                            log("send KEEP_ALIVE");
+                            async_write(s, ba::buffer(oMessage.message.dump(4)), yc);
+                        }
                     }
                 });
             });
